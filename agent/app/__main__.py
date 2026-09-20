@@ -1,3 +1,6 @@
+import asyncio
+import os
+
 import click
 import uvicorn
 from pydantic import BaseModel, ValidationError
@@ -6,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from core.generic_executor import GenericAgentExecutor
+from core.generic_executor import ExecutionResult, GenericAgentExecutor
 from core.models import StreamAgentRequest, TaskState
 
 from .agent import TicketTriageAgent
@@ -14,6 +17,67 @@ from .agent import TicketTriageAgent
 
 class BatchTriageRequest(BaseModel):
     tickets: list[StreamAgentRequest]
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _result_to_item(result: ExecutionResult) -> dict:
+    artifact = result.final_artifact
+    return {
+        "status": result.status.value,
+        "artifact": artifact.model_dump(mode="json") if artifact else None,
+        "error": str(result.error) if result.error else None,
+    }
+
+
+async def run_batch(
+    executor: GenericAgentExecutor,
+    tickets: list[StreamAgentRequest],
+    max_concurrency: int,
+    timeout: float,
+) -> list[dict]:
+    """Triage `tickets` concurrently, bounding parallelism and per-ticket time.
+
+    A failing or timed-out ticket becomes a ``failed`` item; it never fails
+    the whole batch.
+    """
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def run_one(ticket: StreamAgentRequest) -> dict:
+        async with semaphore:
+            try:
+                result = await asyncio.wait_for(executor.execute(ticket), timeout=timeout)
+            except TimeoutError:
+                return {
+                    "status": TaskState.failed.value,
+                    "artifact": None,
+                    "error": f"timed out after {timeout}s",
+                }
+            except Exception as exc:
+                return {
+                    "status": TaskState.failed.value,
+                    "artifact": None,
+                    "error": str(exc),
+                }
+        return _result_to_item(result)
+
+    outcomes = await asyncio.gather(
+        *(run_one(ticket) for ticket in tickets), return_exceptions=True
+    )
+    return [
+        {"status": TaskState.failed.value, "artifact": None, "error": str(outcome)}
+        if isinstance(outcome, BaseException)
+        else outcome
+        for outcome in outcomes
+    ]
 
 
 def create_app() -> Starlette:
@@ -40,16 +104,15 @@ def create_app() -> Starlette:
         )
 
     async def batch_triage(request: Request) -> JSONResponse:
-        """
-        TODO(candidate): triage a batch of tickets concurrently and return all results.
+        try:
+            batch = BatchTriageRequest(**await request.json())
+        except ValidationError as exc:
+            return JSONResponse({"errors": exc.errors()}, status_code=400)
 
-        Things to consider:
-        - How do you bound the number of simultaneous LLM calls?
-        - What happens when one ticket fails — does the whole batch fail, or do you
-          return partial results?
-        - How do you enforce a per-ticket timeout?
-        """
-        return JSONResponse({"error": "not implemented"}, status_code=501)
+        max_concurrency = max(1, _env_int("BATCH_MAX_CONCURRENCY", 5))
+        timeout = _env_int("BATCH_TICKET_TIMEOUT_SECONDS", 30)
+        results = await run_batch(executor, batch.tickets, max_concurrency, timeout)
+        return JSONResponse({"results": results})
 
     return Starlette(
         routes=[
