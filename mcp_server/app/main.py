@@ -5,15 +5,16 @@ Run standalone with:
     uv run python -m mcp_server.main
 """
 
-import json
+import logging
 import os
-from pathlib import Path
 
 from fastmcp import FastMCP
 
-_DATA_PATH = Path(__file__).parent / "data.json"
-_ARTICLES: list[dict] = json.loads(_DATA_PATH.read_text())
+from .data import load_articles
 
+logger = logging.getLogger(__name__)
+
+_ARTICLES: list[dict] = load_articles()
 # Common words excluded so they don't inflate every article's score just by
 # appearing in ordinary English sentences.
 _STOPWORDS = {
@@ -55,6 +56,7 @@ def search_kb(query: str, max_results: int = 3) -> list[dict]:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     mcp.run(
         transport="streamable-http",
         host="0.0.0.0",
