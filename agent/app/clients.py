@@ -20,7 +20,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from core.core.exceptions import AgentError
+from core.exceptions import AgentError
 
 from .models import TicketTriageOutput
 
