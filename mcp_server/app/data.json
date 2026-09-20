@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "title": "Resetting your 2FA device",
+    "body": "If your two-factor authentication codes stop arriving, go to Settings > Security > Two-Factor Auth and click 'Reset device'. You'll need to verify via your backup email.",
+    "product_area": "account"
+  },
+  {
+    "id": 2,
+    "title": "Understanding API rate limits (429 responses)",
+    "body": "Free-tier keys are limited to 60 requests per minute. A 429 response includes a Retry-After header indicating how many seconds to wait before retrying.",
+    "product_area": "api"
+  },
+  {
+    "id": 3,
+    "title": "Exporting your data as CSV",
+    "body": "Go to Dashboard > Export, choose a date range, and select CSV format. Exports over 100k rows are emailed to you as a download link instead of streamed directly.",
+    "product_area": "data"
+  },
+  {
+    "id": 4,
+    "title": "Billing: understanding proration on plan changes",
+    "body": "Upgrading mid-cycle charges a prorated difference immediately. Downgrading takes effect at the start of the next billing cycle, with no refund for the current one.",
+    "product_area": "billing"
+  },
+  {
+    "id": 5,
+    "title": "Configuring the Slack integration",
+    "body": "Under Integrations > Slack, click Connect and authorize the OAuth prompt. Notifications can be scoped to specific channels in the integration settings.",
+    "product_area": "integrations"
+  },
+  {
+    "id": 6,
+    "title": "Why did my scheduled export fail?",
+    "body": "Scheduled exports fail silently if the destination webhook returns a non-2xx response three times in a row. Check Settings > Exports > History for the failure reason.",
+    "product_area": "data"
+  },
+  {
+    "id": 7,
+    "title": "Team member permissions and roles",
+    "body": "Roles are Owner, Admin, Editor, and Viewer. Only Owners can change billing details or delete the workspace. Admins can manage members but not billing.",
+    "product_area": "account"
+  },
+  {
+    "id": 8,
+    "title": "Investigating intermittent 500 errors on the API",
+    "body": "Transient 500s are usually caused by upstream database failover, which typically resolves within 30 seconds. If errors persist beyond a few minutes, check the status page.",
+    "product_area": "api"
+  },
+  {
+    "id": 9,
+    "title": "Requesting permanent account deletion",
+    "body": "Account deletion requests are processed within 30 days per our data retention policy. Data cannot be recovered once a deletion request is confirmed.",
+    "product_area": "account"
+  },
+  {
+    "id": 10,
+    "title": "Webhook signature verification",
+    "body": "Every webhook payload includes an X-Signature header, an HMAC-SHA256 of the raw body using your webhook signing secret. Verify it before trusting payload contents.",
+    "product_area": "integrations"
+  }
+]
