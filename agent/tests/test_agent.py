@@ -97,3 +97,25 @@ async def test_kb_exception_propagates_and_fails_task():
 
     assert result.status == TaskState.failed
     assert isinstance(result.error, RuntimeError)
+
+
+async def test_no_articles_yields_summary_update():
+    async def fake_llm(query, articles):
+        return TicketTriageOutput(
+            category="api",
+            priority="low",
+            summary="x",
+            cited_article_ids=[],
+        )
+
+    async def fake_kb(query):
+        return []
+
+    agent = TicketTriageAgent(llm=fake_llm, kb_search=fake_kb)
+    result = await GenericAgentExecutor(agent).execute(_request())
+
+    artifact = result.final_artifact
+    assert isinstance(artifact, ArtifactUpdateYield)
+    assert artifact.state == TaskState.completed
+    assert artifact.last_chunk is True
+    assert artifact.content[0].data["summary"] == "No relevant articles found."
