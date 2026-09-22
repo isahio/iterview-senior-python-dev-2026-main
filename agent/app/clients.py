@@ -13,7 +13,9 @@ tests inject fakes so they never need a live MCP server or LLM key.
 
 import asyncio
 import json
+import logging
 import os
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -23,9 +25,7 @@ from pydantic import ValidationError
 from core.exceptions import AgentError
 
 from .models import TicketTriageOutput
-import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -42,6 +42,16 @@ def _env_int(name: str, default: int) -> int:
         return default
     try:
         return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
     except (TypeError, ValueError):
         return default
 
@@ -234,6 +244,12 @@ async def search_kb(query: str, max_results: int = 3) -> list[dict]:
 _DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_LLM_MODEL = "gpt-4o-mini"
 
+_RETRYABLE_LLM_STATUS_CODES = {408, 429} | set(range(500, 600))
+
+
+class _TransientError(RuntimeError):
+    """A retryable provider/network failure (rate limit, 5xx, or timeout)."""
+
 _SYSTEM_PROMPT = (
     "You are a support-ticket triage assistant. Classify the ticket into a "
     "short category, assign a priority (low, medium, high, or urgent), write "
@@ -302,9 +318,14 @@ def _call_llm_sync(
             raw = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"LLM call failed ({exc.code}): {detail}") from exc
+        message = f"LLM call failed ({exc.code}): {detail}"
+        if exc.code in _RETRYABLE_LLM_STATUS_CODES:
+            raise _TransientError(message) from exc
+        raise RuntimeError(message) from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"LLM call failed: {exc.reason}") from exc
+        raise _TransientError(f"LLM call failed: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise _TransientError(f"LLM call timed out after {timeout}s") from exc
 
     try:
         data = json.loads(raw)
@@ -320,6 +341,35 @@ def _call_llm_sync(
         raise RuntimeError(f"LLM returned invalid output: {exc}") from exc
 
 
+def _call_llm_sync_with_retry(
+    base_url: str,
+    api_key: str,
+    model: str,
+    query: str,
+    articles: list[dict],
+    timeout: int,
+    max_retries: int,
+    backoff_seconds: float,
+) -> TicketTriageOutput:
+    attempts = max_retries + 1
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _call_llm_sync(base_url, api_key, model, query, articles, timeout)
+        except _TransientError as exc:
+            last_exc = exc
+            if attempt < attempts:
+                logger.warning(
+                    "LLM call attempt %d/%d failed (transient): %s; retrying",
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                time.sleep(backoff_seconds * (2 ** (attempt - 1)))
+                continue
+    raise _TransientError(f"LLM call failed after {attempts} attempt(s): {last_exc}") from last_exc
+
+
 async def triage_with_llm(query: str, articles: list[dict]) -> TicketTriageOutput:
     """Call an OpenAI-compatible chat-completions endpoint and validate its output."""
     api_key = os.getenv("LLM_API_KEY")
@@ -329,9 +379,19 @@ async def triage_with_llm(query: str, articles: list[dict]) -> TicketTriageOutpu
     base_url = _env_str("LLM_BASE_URL", _DEFAULT_LLM_BASE_URL)
     model = _env_str("LLM_MODEL", _DEFAULT_LLM_MODEL)
     timeout = _env_int("LLM_TIMEOUT_SECONDS", 60)
+    max_retries = max(0, _env_int("LLM_MAX_RETRIES", 2))
+    backoff_seconds = max(0.0, _env_float("LLM_RETRY_BACKOFF_SECONDS", 1.0))
     try:
         return await asyncio.to_thread(
-            _call_llm_sync, base_url, api_key, model, query, articles, timeout
+            _call_llm_sync_with_retry,
+            base_url,
+            api_key,
+            model,
+            query,
+            articles,
+            timeout,
+            max_retries,
+            backoff_seconds,
         )
     except AgentError:
         raise
