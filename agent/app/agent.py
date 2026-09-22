@@ -38,25 +38,20 @@ class TicketTriageAgent(BaseAgent):
         )
         articles = await self._kb_search(request.query)
 
-        yield TaskStatusUpdateYield(
-            state=TaskState.working,
-            content=[TextContent(text="Triaging ticket…")],
-        )
-
-        output = await self._llm(request.query, articles)
-
-        # If no articles were found, update the output to indicate this and yield it as an artifact.
         if not articles:
-            data = output.model_dump(mode="json")
-            data["summary"] = "No relevant articles found."
+            output = TicketTriageOutput(
+                category="Uncategorized",
+                priority="low",
+                summary="No relevant articles found.", cited_article_ids=[])
 
-            yield ArtifactUpdateYield(
-                state=TaskState.completed,
-                last_chunk=True,
-                name="ticket-triage",
-                content=[DataContent(data=data)],
+        else:
+
+            yield TaskStatusUpdateYield(
+                state=TaskState.working,
+                content=[TextContent(text="Triaging ticket…")],
             )
-            return
+
+            output = await self._llm(request.query, articles)
 
         valid_ids = {
             article["id"]

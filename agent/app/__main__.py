@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import click
@@ -132,6 +133,7 @@ def create_app() -> Starlette:
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload") # for debugging
 def main(host: str, port: int, reload: bool) -> None:
     """Run the Ticket Triage Agent behind a minimal HTTP server."""
+    logging.basicConfig(level=logging.INFO)
     uvicorn.run(
         # create_app(),
          "agent.app.__main__:create_app",
