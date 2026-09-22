@@ -13,6 +13,7 @@ from fastmcp import FastMCP
 from .data import load_articles
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 _ARTICLES: list[dict] = load_articles()
 # Common words excluded so they don't inflate every article's score just by
@@ -49,10 +50,13 @@ def search_kb(query: str, max_results: int = 3) -> list[dict]:
     def score(article: dict) -> int:
         text = f"{article['title']} {article['body']}".lower()
         return sum(1 for term in query_terms if term in text)
-
     ranked = [a for a in _ARTICLES if score(a) > 0]
     ranked.sort(key=score, reverse=True)
-    return ranked[:max_results]
+    results = ranked[:max_results]
+
+    if len(results) == 0:
+        logger.info("No articles matched the query: %s", query)
+    return results
 
 
 if __name__ == "__main__":
