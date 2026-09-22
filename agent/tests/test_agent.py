@@ -79,7 +79,7 @@ async def test_llm_exception_propagates_and_fails_task():
         raise RuntimeError("llm down")
 
     async def fake_kb(query):
-        return []
+        return [_article(1)]
 
     agent = TicketTriageAgent(llm=fake_llm, kb_search=fake_kb)
     result = await GenericAgentExecutor(agent).execute(_request())
