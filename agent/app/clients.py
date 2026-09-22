@@ -23,14 +23,20 @@ from pydantic import ValidationError
 from core.exceptions import AgentError
 
 from .models import TicketTriageOutput
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def _env_str(name: str, default: str) -> str:
+    # Return the environment variable value if it exists, otherwise return the default.
     value = os.getenv(name)
     return value if value is not None else default
 
 
 def _env_int(name: str, default: int) -> int:
+    # Return the environment variable value as an integer if it exists and is valid, otherwise return the default.
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -206,6 +212,13 @@ def _search_kb_sync(
 
 async def search_kb(query: str, max_results: int = 3) -> list[dict]:
     """Search the knowledge base over MCP (streamable-http), with retries."""
+    # kb function lookup. Function thin async wrapper areound sync function that talks to MCP server. The fucntions _search_kb_sync blocks the threas it runs on, so we offload it to a separate thread using asyncio.to_thread to avoid blocking the event loop.
+    # in other words, the async function `search_kb` is just a non-blocking wrapper around the blocking `_search_kb_sync` function.
+    """
+    1. Runs _search_kb_sync on a worker thread from the default ThreadPoolExecutor.
+    2. Returns an awaitable that resolves to whatever _search_kb_sync returns (here, a list[dict]).
+    3. Lets the caller await it, so the event loop keeps running while the blocking I/O happens on the side thread."""
+
     base_url = _env_str("MCP_SERVER_URL", "http://localhost:8001").rstrip("/")
     timeout = _env_int("MCP_TIMEOUT_SECONDS", 5)
     max_retries = _env_int("MCP_MAX_RETRIES", 2)

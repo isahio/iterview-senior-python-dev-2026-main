@@ -3,6 +3,7 @@ import os
 
 import click
 import uvicorn
+from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -13,6 +14,8 @@ from core.generic_executor import ExecutionResult, GenericAgentExecutor
 from core.models import StreamAgentRequest, TaskState
 
 from .agent import TicketTriageAgent
+
+load_dotenv()
 
 
 class BatchTriageRequest(BaseModel):
@@ -126,9 +129,15 @@ def create_app() -> Starlette:
 @click.command()
 @click.option("--host", default="127.0.0.1", help="Host to bind to")
 @click.option("--port", default=8000, help="Port to bind to")
-def main(host: str, port: int) -> None:
+@click.option("--reload", is_flag=True, default=False, help="Enable auto-reload") # for debugging
+def main(host: str, port: int, reload: bool) -> None:
     """Run the Ticket Triage Agent behind a minimal HTTP server."""
-    uvicorn.run(create_app(), host=host, port=port)
+    uvicorn.run(
+        # create_app(),
+         "agent.app.__main__:create_app",
+        host=host,
+        port=port,
+        reload=reload)
 
 
 if __name__ == "__main__":
