@@ -74,3 +74,29 @@ following go beyond that minimum and are documented so their scope is explicit:
 - **Logging config in the entrypoint** — `logging.basicConfig` lives in
   `main()` (`__main__.py`), not in the `clients` library module, so importing the
   client doesn't mutate the root logger; `clients` only obtains a module `logger`.
+
+## Running locally (curl)
+
+Start both services first (separate terminals):
+
+```bash
+uv run python -m mcp_server.app.main   # MCP server on 8001
+uv run python -m agent.app             # agent on 8000
+```
+
+Then:
+
+```bash
+# health
+curl http://127.0.0.1:8000/health
+
+# /triage
+curl -X POST http://127.0.0.1:8000/triage -H "Content-Type: application/json" -d "{\"query\":\"API calls returning 429s\",\"context_id\":\"c1\"}"
+
+# /batch
+curl -X POST http://127.0.0.1:8000/batch -H "Content-Type: application/json" -d "{\"tickets\":[{\"query\":\"429 errors\",\"context_id\":\"c1\"},{\"query\":\"login broken\",\"context_id\":\"c2\"}]}"
+```
+
+The `\"` escapes are for Windows `cmd.exe`, which treats single quotes as literal
+characters. On bash/zsh use single quotes instead, e.g.
+`-d '{"query":"API calls returning 429s","context_id":"c1"}'`.
