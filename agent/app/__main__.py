@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 
@@ -93,6 +94,8 @@ def create_app() -> Starlette:
     async def triage(request: Request) -> JSONResponse:
         try:
             agent_request = StreamAgentRequest(**await request.json())
+        except json.JSONDecodeError:
+            return JSONResponse({"errors": [{"msg": "invalid JSON body"}]}, status_code=400)
         except ValidationError as exc:
             return JSONResponse({"errors": exc.errors()}, status_code=400)
 
@@ -110,6 +113,8 @@ def create_app() -> Starlette:
     async def batch_triage(request: Request) -> JSONResponse:
         try:
             batch = BatchTriageRequest(**await request.json())
+        except json.JSONDecodeError:
+            return JSONResponse({"errors": [{"msg": "invalid JSON body"}]}, status_code=400)
         except ValidationError as exc:
             return JSONResponse({"errors": exc.errors()}, status_code=400)
 

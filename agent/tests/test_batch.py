@@ -111,6 +111,31 @@ async def test_batch_triage_returns_400_on_bad_body():
     assert response.status_code == 400
 
 
+async def test_batch_triage_returns_400_on_invalid_json():
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": b"{not valid json",
+            "more_body": False,
+        }
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/batch",
+            "headers": [(b"content-type", b"application/json")],
+            "query_string": b"",
+        },
+        receive=receive,
+    )
+
+    handler = _batch_handler()
+    response = await handler(request)
+
+    assert response.status_code == 400
+
+
 async def test_batch_triage_returns_200_with_results(monkeypatch):
     async def fake_search(query, max_results=3):
         return [{"id": 1, "title": "t", "body": "b", "product_area": "p"}]
