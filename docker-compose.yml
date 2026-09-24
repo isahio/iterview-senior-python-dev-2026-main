@@ -20,5 +20,7 @@ services:
         required: false
     environment:
       MCP_SERVER_URL: http://mcp-server:8001
+      # Base URL for the LLM service using Ollama
+      LLM_BASE_URL: http://host.docker.internal:11434/v1
     depends_on:
       - mcp-server
